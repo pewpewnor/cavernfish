@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "cavernfish",
+  "outputfilename": "cavernfish",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "pewpewnor",
+    "email": "125549982+pewpewnor@users.noreply.github.com"
+  }
+}
