@@ -1,26 +1,208 @@
-html {
-    background-color: rgba(27, 38, 54, 1);
-    text-align: center;
-    color: white;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-body {
+@layer base {
+  html,
+  body,
+  #app {
+    @apply h-full overflow-hidden bg-cave-base font-sans text-[13px] text-ink;
+    -webkit-font-smoothing: antialiased;
+    color-scheme: dark;
+  }
+
+  /* ── Scrollbars ────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-wire-hi;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-muted;
+  }
+
+  /* ── Button reset ───────────────────────────────────────────────────── */
+  button {
+    @apply cursor-pointer outline-none;
+  }
+
+  /* ── Text inputs & textarea ─────────────────────────────────────────── */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  textarea {
+    @apply rounded-sm border border-wire bg-cave-raised px-2 py-1 text-[13px] text-ink
+      outline-none transition-colors placeholder:text-ink-muted
+      hover:border-wire-hi focus:border-accent focus:ring-2 focus:ring-accent/20;
+    font-family: inherit;
+    font-size: inherit;
+  }
+
+  /* Remove number-input spinners */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
     margin: 0;
-    color: white;
-    font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  /* ── Select ─────────────────────────────────────────────────────────── */
+  select {
+    @apply appearance-none rounded-sm border border-wire bg-cave-raised py-1 pl-2 text-[13px]
+      text-ink outline-none transition-colors hover:border-wire-hi
+      focus:border-accent focus:ring-2 focus:ring-accent/20;
+    font-family: inherit;
+    font-size: inherit;
+    /* custom caret */
+    padding-right: 28px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%234a5368' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+  }
+  select option {
+    @apply bg-cave-elevated text-ink;
+  }
+  select optgroup {
+    @apply bg-cave-deep text-ink-muted;
+  }
+
+  /* ── Checkbox & radio ────────────────────────────────────────────────── */
+  input[type='checkbox'],
+  input[type='radio'] {
+    appearance: none;
+    -webkit-appearance: none;
+    @apply h-[14px] w-[14px] flex-shrink-0 cursor-pointer border border-wire bg-cave-raised
+      outline-none transition-colors hover:border-wire-hi focus:ring-2 focus:ring-accent/20;
+  }
+  input[type='checkbox'] {
+    @apply rounded-[3px];
+  }
+  input[type='radio'] {
+    @apply rounded-full;
+  }
+  input[type='checkbox']:checked {
+    @apply border-accent bg-accent;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 14 14' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2.5 7l3.5 3.5 5.5-6' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-size: 10px 10px;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+  input[type='radio']:checked {
+    @apply border-accent bg-accent;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 14 14' fill='white' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='7' cy='7' r='3'/%3E%3C/svg%3E");
+    background-size: 10px 10px;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+
+  /* ── Range slider ────────────────────────────────────────────────────── */
+  input[type='range'] {
+    @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-cave-raised accent-accent;
+  }
+  input[type='range']::-webkit-slider-thumb {
+    @apply h-3.5 w-3.5 cursor-pointer appearance-none rounded-full bg-accent;
+  }
+
+  /* ── Misc ────────────────────────────────────────────────────────────── */
+  pre,
+  code {
+    font-family: theme('fontFamily.mono');
+  }
+  hr {
+    @apply border-wire;
+  }
 }
 
-@font-face {
-    font-family: "Nunito";
-    font-style: normal;
-    font-weight: 400;
-    src: local(""),
-    url("assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
-}
+@layer components {
+  /* ── Buttons ─────────────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex select-none items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs
+      font-medium transition-all;
+  }
+  .btn-primary {
+    @apply bg-accent text-white hover:bg-accent-hi;
+  }
+  .btn-ghost {
+    @apply border border-wire bg-transparent text-ink-mid
+      hover:border-wire-hi hover:bg-cave-raised hover:text-ink;
+  }
+  .btn-danger {
+    @apply border border-transparent bg-transparent text-err hover:bg-err/10;
+  }
+  .btn-icon {
+    @apply rounded-sm bg-transparent p-1 text-ink-muted transition-colors
+      hover:bg-cave-raised hover:text-ink;
+  }
 
-#app {
-    height: 100vh;
-    text-align: center;
+  /* ── Tags & badges ───────────────────────────────────────────────── */
+  .tag {
+    @apply inline-block rounded-[3px] px-1.5 py-0.5 font-mono text-[10px]
+      font-bold uppercase tracking-wider;
+  }
+  .method-badge {
+    color: #050508;
+  }
+
+  /* ── Status pill ─────────────────────────────────────────────────── */
+  .status-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px]
+      font-semibold tracking-[0.04em];
+  }
+  .status-pill::before {
+    content: '';
+    @apply block h-1.5 w-1.5 rounded-full bg-current;
+  }
+  .status-running {
+    @apply bg-ok/10 text-ok;
+  }
+  .status-stopped {
+    @apply bg-cave-raised text-ink-muted;
+  }
+  .status-error {
+    @apply bg-err/10 text-err;
+  }
+
+  /* ── Tab strip ───────────────────────────────────────────────────── */
+  .tab-strip {
+    @apply flex border-b border-wire bg-cave-deep px-3;
+  }
+  .tab-btn {
+    @apply -mb-px border-b-2 border-transparent px-3 py-2 text-xs text-ink-mid
+      transition-colors hover:text-ink;
+  }
+  .tab-btn.active {
+    @apply border-accent text-accent;
+  }
+
+  /* ── Toggle switch ───────────────────────────────────────────────── */
+  .toggle-track {
+    @apply relative block h-[18px] w-8 rounded-full border border-wire bg-cave-raised
+      transition-all;
+  }
+  .toggle-thumb {
+    @apply absolute left-0.5 top-0.5 block h-3 w-3 rounded-full bg-ink-muted transition-all;
+  }
+  .toggle-on .toggle-track {
+    @apply border-accent bg-accent/10;
+  }
+  .toggle-on .toggle-thumb {
+    @apply left-[18px] bg-accent;
+  }
+
+  /* ── Form helpers ────────────────────────────────────────────────── */
+  .form-label {
+    @apply text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-muted;
+  }
+  .section-header {
+    @apply flex items-center justify-between border-b border-wire bg-cave-deep px-4 py-3;
+  }
+  .section-title {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted;
+  }
 }

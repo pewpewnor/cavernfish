@@ -1,7 +1,14 @@
-import {defineConfig} from 'vite'
-import {svelte} from '@sveltejs/vite-plugin-svelte'
+import { defineConfig } from 'vite'
+import { svelte } from '@sveltejs/vite-plugin-svelte'
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [svelte()]
+  plugins: [
+    svelte({
+      onwarn(warning, handler) {
+        // Suppress a11y warnings — intentional UX decisions in this codebase
+        if (warning.code.startsWith('a11y-')) return
+        handler(warning)
+      },
+    }),
+  ],
 })

@@ -1,79 +1,49 @@
 <script lang="ts">
-  import logo from './assets/images/logo-universal.png'
-  import {Greet} from '../wailsjs/go/main/App.js'
+  import { onMount } from 'svelte'
+  import TopBar from './components/TopBar.svelte'
+  import Sidebar from './components/Sidebar.svelte'
+  import ServerPanel from './components/ServerPanel.svelte'
+  import CollectionsView from './components/CollectionsView.svelte'
+  import SettingsPanel from './components/SettingsPanel.svelte'
+  import BreakpointPanel from './components/BreakpointPanel.svelte'
+  import { activeView, collections, servers, pendingBreakpoints } from './stores/index'
+  import * as api from './lib/api'
 
-  let resultText: string = "Please enter your name below 👇"
-  let name: string
+  onMount(async () => {
+    const [cols, srvs] = await Promise.all([api.getCollections(), api.getServers()])
+    collections.set(cols ?? [])
+    servers.set(srvs ?? [])
 
-  function greet(): void {
-    Greet(name).then(result => resultText = result)
-  }
+    api.onServerStatus((updated) => servers.set(updated))
+
+    api.onBreakpointHit((hit) => {
+      pendingBreakpoints.update((list) => {
+        if (list.some((b) => b.id === hit.id)) return list
+        return [...list, hit]
+      })
+    })
+
+    api.onBreakpointReleased((id) => {
+      pendingBreakpoints.update((list) => list.filter((b) => b.id !== id))
+    })
+  })
 </script>
 
-<main>
-  <img alt="Wails logo" id="logo" src="{logo}">
-  <div class="result" id="result">{resultText}</div>
-  <div class="input-box" id="input">
-    <input autocomplete="off" bind:value={name} class="input" id="name" type="text"/>
-    <button class="btn" on:click={greet}>Greet</button>
+<div class="flex h-full flex-col overflow-hidden">
+  <TopBar />
+
+  <div class="flex min-h-0 flex-1 overflow-hidden">
+    {#if $activeView === 'collections'}
+      <Sidebar />
+      <CollectionsView />
+    {:else if $activeView === 'servers'}
+      <ServerPanel />
+    {:else if $activeView === 'settings'}
+      <SettingsPanel />
+    {/if}
   </div>
-</main>
 
-<style>
-
-  #logo {
-    display: block;
-    width: 50%;
-    height: 50%;
-    margin: auto;
-    padding: 10% 0 0;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
-    background-origin: content-box;
-  }
-
-  .result {
-    height: 20px;
-    line-height: 20px;
-    margin: 1.5rem auto;
-  }
-
-  .input-box .btn {
-    width: 60px;
-    height: 30px;
-    line-height: 30px;
-    border-radius: 3px;
-    border: none;
-    margin: 0 0 0 20px;
-    padding: 0 8px;
-    cursor: pointer;
-  }
-
-  .input-box .btn:hover {
-    background-image: linear-gradient(to top, #cfd9df 0%, #e2ebf0 100%);
-    color: #333333;
-  }
-
-  .input-box .input {
-    border: none;
-    border-radius: 3px;
-    outline: none;
-    height: 30px;
-    line-height: 30px;
-    padding: 0 10px;
-    background-color: rgba(240, 240, 240, 1);
-    -webkit-font-smoothing: antialiased;
-  }
-
-  .input-box .input:hover {
-    border: none;
-    background-color: rgba(255, 255, 255, 1);
-  }
-
-  .input-box .input:focus {
-    border: none;
-    background-color: rgba(255, 255, 255, 1);
-  }
-
-</style>
+  {#if $pendingBreakpoints.length > 0}
+    <BreakpointPanel />
+  {/if}
+</div>

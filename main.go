@@ -17,17 +17,15 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "cavernfish",
-		Width:  1024,
-		Height: 768,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		Title:            "Cavernfish",
+		Width:            1400,
+		Height:           900,
+		MinWidth:         1024,
+		MinHeight:        640,
+		AssetServer:      &assetserver.Options{Assets: assets},
+		BackgroundColour: &options.RGBA{R: 5, G: 5, B: 8, A: 1},
 		OnStartup:        app.startup,
-		Bind: []interface{}{
-			app,
-		},
+		Bind:             []interface{}{app},
 	})
 
 	if err != nil {
