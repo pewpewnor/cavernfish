@@ -59,19 +59,21 @@ export interface ServerInfo {
   id: string
   name: string
   port: number
-  collectionId: string
+  collectionIds: string[]
   https: boolean
   status: 'running' | 'stopped' | 'error'
   errorMsg?: string
   requestCount: number
+  disabledEndpointIds: string[]
 }
 
 export interface ServerConfig {
   id: string
   name: string
   port: number
-  collectionId: string
+  collectionIds: string[]
   https: boolean
+  disabledEndpointIds: string[]
 }
 
 export interface RequestLogEntry {

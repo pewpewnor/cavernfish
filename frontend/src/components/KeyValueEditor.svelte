@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte'
   import type { KVPair } from '../lib/types'
   import { newKVPair } from '../lib/types'
 
@@ -6,14 +7,31 @@
   export let keyPlaceholder = 'Key'
   export let valuePlaceholder = 'Value'
 
+  const dispatch = createEventDispatcher()
+
+  function emit(next: KVPair[]) {
+    pairs = next
+    dispatch('change', next)
+  }
+
   function add() {
-    pairs = [...pairs, newKVPair()]
+    emit([...pairs, newKVPair()])
   }
+
   function remove(i: number) {
-    pairs = pairs.filter((_, idx) => idx !== i)
+    emit(pairs.filter((_, idx) => idx !== i))
   }
+
   function toggle(i: number) {
-    pairs = pairs.map((p, idx) => (idx === i ? { ...p, enabled: !p.enabled } : p))
+    emit(pairs.map((p, idx) => (idx === i ? { ...p, enabled: !p.enabled } : p)))
+  }
+
+  function setKey(i: number, v: string) {
+    emit(pairs.map((p, idx) => (idx === i ? { ...p, key: v } : p)))
+  }
+
+  function setValue(i: number, v: string) {
+    emit(pairs.map((p, idx) => (idx === i ? { ...p, value: v } : p)))
   }
 </script>
 
@@ -45,27 +63,17 @@
           />
         </button>
         <input
-          class="w-full border-transparent bg-transparent px-1.5 py-1 font-mono text-xs hover:border-wire hover:bg-cave-raised focus:border-accent focus:bg-cave-raised"
           placeholder={keyPlaceholder}
           value={pair.key}
-          on:input={(e) => {
-            const v = e.currentTarget.value
-            pairs = pairs.map((p, idx) => (idx === i ? { ...p, key: v } : p))
-          }}
+          on:input={(e) => setKey(i, e.currentTarget.value)}
         />
         <input
-          class="w-full border-transparent bg-transparent px-1.5 py-1 font-mono text-xs hover:border-wire hover:bg-cave-raised focus:border-accent focus:bg-cave-raised"
           placeholder={valuePlaceholder}
           value={pair.value}
-          on:input={(e) => {
-            const v = e.currentTarget.value
-            pairs = pairs.map((p, idx) => (idx === i ? { ...p, value: v } : p))
-          }}
+          on:input={(e) => setValue(i, e.currentTarget.value)}
         />
-        <button
-          class="btn-icon text-[10px] hover:text-err"
-          on:click={() => remove(i)}
-          title="Remove">✕</button
+        <button class="btn-icon text-[10px] hover:text-err" on:click={() => remove(i)} title="Remove"
+          >✕</button
         >
       </div>
     {/each}

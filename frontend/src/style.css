@@ -6,7 +6,7 @@
   html,
   body,
   #app {
-    @apply h-full overflow-hidden bg-cave-base font-sans text-[13px] text-ink;
+    @apply h-full overflow-hidden bg-cave-base font-sans text-sm text-ink;
     -webkit-font-smoothing: antialiased;
     color-scheme: dark;
   }
@@ -34,7 +34,7 @@
   /* ── Text inputs & textarea ─────────────────────────────────────────── */
   input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
   textarea {
-    @apply rounded-sm border border-wire bg-cave-raised px-2 py-1 text-[13px] text-ink
+    @apply rounded-sm border border-wire bg-cave-raised px-2.5 py-1.5 text-sm text-ink
       outline-none transition-colors placeholder:text-ink-muted
       hover:border-wire-hi focus:border-accent focus:ring-2 focus:ring-accent/20;
     font-family: inherit;
@@ -54,7 +54,7 @@
 
   /* ── Select ─────────────────────────────────────────────────────────── */
   select {
-    @apply appearance-none rounded-sm border border-wire bg-cave-raised py-1 pl-2 text-[13px]
+    @apply appearance-none rounded-sm border border-wire bg-cave-raised py-1.5 pl-2.5 text-sm
       text-ink outline-none transition-colors hover:border-wire-hi
       focus:border-accent focus:ring-2 focus:ring-accent/20;
     font-family: inherit;
@@ -122,7 +122,7 @@
 @layer components {
   /* ── Buttons ─────────────────────────────────────────────────────── */
   .btn {
-    @apply inline-flex select-none items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs
+    @apply inline-flex select-none items-center gap-1.5 rounded-sm px-3.5 py-1.5 text-sm
       font-medium transition-all;
   }
   .btn-primary {
@@ -173,7 +173,7 @@
     @apply flex border-b border-wire bg-cave-deep px-3;
   }
   .tab-btn {
-    @apply -mb-px border-b-2 border-transparent px-3 py-2 text-xs text-ink-mid
+    @apply -mb-px border-b-2 border-transparent px-3 py-2.5 text-sm text-ink-mid
       transition-colors hover:text-ink;
   }
   .tab-btn.active {
@@ -197,7 +197,7 @@
 
   /* ── Form helpers ────────────────────────────────────────────────── */
   .form-label {
-    @apply text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-muted;
+    @apply text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted;
   }
   .section-header {
     @apply flex items-center justify-between border-b border-wire bg-cave-deep px-4 py-3;

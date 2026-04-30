@@ -1,31 +1,82 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte'
-  import type { Endpoint } from '../lib/types'
-  import { METHOD_COLORS, newMockResponse } from '../lib/types'
+  import type { Endpoint, MockResponse } from '../lib/types'
+  import { METHOD_COLORS, newMockResponse, statusColor } from '../lib/types'
+  import { tabEdits, activeTabId } from '../stores/index'
   import ResponseEditor from './ResponseEditor.svelte'
+
+  function prettifyBody(body: string, bodyType: string): string {
+    if (bodyType === 'json') {
+      try {
+        return JSON.stringify(JSON.parse(body), null, 4)
+      } catch {
+        return body
+      }
+    }
+    if (bodyType === 'xml' || bodyType === 'html') {
+      try {
+        const mime = bodyType === 'html' ? 'text/html' : 'application/xml'
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(body.trim(), mime)
+        const root = bodyType === 'html' ? doc.body : doc.documentElement
+        if (!root) return body
+        return formatXmlNode(root, 0)
+      } catch {
+        return body
+      }
+    }
+    return body
+  }
+
+  function formatXmlNode(node: Node, depth: number): string {
+    const pad = '    '.repeat(depth)
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent?.trim() ?? ''
+    }
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as Element
+      const attrs = Array.from(el.attributes).map((a) => ` ${a.name}="${a.value}"`).join('')
+      const tag = el.tagName.toLowerCase()
+      const nonEmpty = Array.from(el.childNodes).filter(
+        (n) => n.nodeType !== Node.TEXT_NODE || (n.textContent?.trim() ?? ''),
+      )
+      if (nonEmpty.length === 0) return `${pad}<${tag}${attrs}/>`
+      const hasEls = nonEmpty.some((n) => n.nodeType === Node.ELEMENT_NODE)
+      if (!hasEls) return `${pad}<${tag}${attrs}>${el.textContent?.trim() ?? ''}</${tag}>`
+      const children = nonEmpty.map((c) => formatXmlNode(c, depth + 1)).filter(Boolean).join('\n')
+      return `${pad}<${tag}${attrs}>\n${children}\n${pad}</${tag}>`
+    }
+    return ''
+  }
 
   export let endpoint: Endpoint
   export let collectionId: string
   export let folderId: string
+  export let tabId: string
 
   const dispatch = createEventDispatcher()
 
-  let editingEndpoint: Endpoint = JSON.parse(JSON.stringify(endpoint))
-  let activeResponseIdx = editingEndpoint.activeIdx ?? 0
-  let dirty = false
-
   const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', '*']
 
-  $: if (endpoint) {
+  let editingEndpoint: Endpoint = JSON.parse(JSON.stringify(endpoint))
+  let activeResponseIdx = editingEndpoint.activeIdx ?? 0
+  let activeTab: 'body' | 'headers' | 'cookies' | 'configure' = 'body'
+  let dirty = false
+  let prevEndpointId = endpoint.id
+
+  $: if (endpoint.id !== prevEndpointId) {
+    prevEndpointId = endpoint.id
     editingEndpoint = JSON.parse(JSON.stringify(endpoint))
     activeResponseIdx = editingEndpoint.activeIdx ?? 0
+    activeTab = 'body'
     dirty = false
   }
 
-  $: activeResponse = editingEndpoint.responses[activeResponseIdx] ?? null
+  $: tabEdits.update((m) => ({ ...m, [tabId]: editingEndpoint }))
 
   function markDirty() {
     dirty = true
+    dispatch('dirtyChange', true)
   }
 
   function addResponse() {
@@ -33,186 +84,101 @@
     resp.name = `Response ${editingEndpoint.responses.length + 1}`
     editingEndpoint.responses = [...editingEndpoint.responses, resp]
     activeResponseIdx = editingEndpoint.responses.length - 1
-    dirty = true
+    markDirty()
   }
 
   function removeResponse(i: number) {
     if (editingEndpoint.responses.length <= 1) return
     editingEndpoint.responses = editingEndpoint.responses.filter((_, idx) => idx !== i)
-    if (activeResponseIdx >= editingEndpoint.responses.length) {
-      activeResponseIdx = editingEndpoint.responses.length - 1
-    }
-    dirty = true
+    activeResponseIdx = Math.min(activeResponseIdx, editingEndpoint.responses.length - 1)
+    markDirty()
+  }
+
+  function handleResponseUpdate(e: CustomEvent<MockResponse>) {
+    editingEndpoint.responses = editingEndpoint.responses.map((r, i) =>
+      i === activeResponseIdx ? e.detail : r,
+    )
+    markDirty()
   }
 
   function save() {
     editingEndpoint.activeIdx = activeResponseIdx
     dispatch('save', { collectionId, folderId, endpoint: editingEndpoint })
     dirty = false
+    dispatch('dirtyChange', false)
   }
 
-  function onResponseChange() {
-    editingEndpoint.responses = [...editingEndpoint.responses]
-    dirty = true
+  function mc(m: string) {
+    return METHOD_COLORS[m.toUpperCase()] || '#64748b'
+  }
+
+  $: activeResponse = editingEndpoint.responses[activeResponseIdx] ?? null
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.ctrlKey && e.key === 's' && $activeTabId === tabId) {
+      e.preventDefault()
+      if (dirty) save()
+    }
   }
 </script>
 
+<svelte:window on:keydown={handleKeydown} />
+
 <div class="flex h-full flex-col overflow-hidden">
-  <!-- Header -->
-  <div class="flex shrink-0 flex-col gap-2.5 border-b border-wire bg-cave-surface px-4 py-3">
-    <!-- Method + path + save -->
-    <div class="flex items-center gap-2">
-      <div class="flex shrink-0 gap-0.5">
-        {#each METHODS as m}
-          <button
-            class="rounded-sm border px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.04em] transition-all"
-            style="--mc:{METHOD_COLORS[m] || '#64748b'};
-              {editingEndpoint.method === m
-              ? `background:color-mix(in srgb,var(--mc) 15%,transparent);color:var(--mc);border-color:var(--mc)`
-              : 'background:transparent;color:#4a5368;border-color:#252a40'}"
-            on:click={() => {
-              editingEndpoint.method = m
-              markDirty()
-            }}>{m === '*' ? 'ANY' : m}</button
-          >
-        {/each}
-      </div>
+  <div class="flex shrink-0 items-center gap-2 border-b border-wire bg-cave-surface px-4 py-3">
+    <select
+      class="w-28 shrink-0 font-mono font-bold"
+      value={editingEndpoint.method}
+      style="color:{mc(editingEndpoint.method)}"
+      on:change={(e) => {
+        editingEndpoint.method = e.currentTarget.value
+        markDirty()
+      }}
+    >
+      {#each METHODS as m}
+        <option value={m} style="color:{mc(m)}">{m === '*' ? 'ANY' : m}</option>
+      {/each}
+    </select>
 
-      <input
-        class="flex-1 font-mono text-sm"
-        placeholder="/api/path/:param"
-        bind:value={editingEndpoint.path}
-        on:input={markDirty}
-      />
+    <input
+      class="flex-1 font-mono"
+      placeholder="/api/path/:param"
+      bind:value={editingEndpoint.path}
+      on:input={markDirty}
+    />
 
-      <button class="btn btn-primary shrink-0" on:click={save} disabled={!dirty}>
+    <div class="flex shrink-0 items-center gap-2">
+      {#if dirty}
+        <span class="h-2.5 w-2.5 rounded-full bg-warn" title="Unsaved changes" />
+      {/if}
+      <button class="btn btn-primary" on:click={save} disabled={!dirty}>
         {dirty ? 'Save' : 'Saved ✓'}
       </button>
     </div>
-
-    <!-- Meta row -->
-    <div class="flex flex-wrap items-center gap-4">
-      <div class="flex flex-col gap-1">
-        <span class="form-label">Name</span>
-        <input
-          class="w-40"
-          placeholder="Endpoint name"
-          bind:value={editingEndpoint.name}
-          on:input={markDirty}
-        />
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <span class="form-label">Delay</span>
-        <div class="flex items-center gap-1">
-          <input
-            type="number"
-            min="0"
-            max="60000"
-            class="w-20"
-            bind:value={editingEndpoint.delayMs}
-            on:input={markDirty}
-          />
-          <span class="text-[11px] text-ink-muted">ms</span>
-        </div>
-      </div>
-
-      <div class="flex flex-col gap-1">
-        <span class="form-label">Strategy</span>
-        <select bind:value={editingEndpoint.strategy} on:change={markDirty}>
-          <option value="fixed">Fixed</option>
-          <option value="cycle">Cycle</option>
-          <option value="random">Random</option>
-        </select>
-      </div>
-
-      <!-- Breakpoint toggle -->
-      <div class="flex items-center gap-2">
-        <span class="form-label">Breakpoint</span>
-        <button
-          class="flex items-center gap-1.5 bg-transparent {editingEndpoint.breakpoint
-            ? 'toggle-on'
-            : ''}"
-          on:click={() => {
-            editingEndpoint.breakpoint = !editingEndpoint.breakpoint
-            markDirty()
-          }}
-          title="Pause incoming requests at this endpoint for live editing"
-        >
-          <span class="toggle-track"><span class="toggle-thumb" /></span>
-          {#if editingEndpoint.breakpoint}
-            <span class="text-[10px] font-bold tracking-[0.05em] text-accent">ON</span>
-          {/if}
-        </button>
-      </div>
-
-      <!-- WebSocket toggle -->
-      <div class="flex items-center gap-2">
-        <span class="form-label">WebSocket</span>
-        <button
-          class="flex items-center bg-transparent {editingEndpoint.wsEnabled ? 'toggle-on' : ''}"
-          on:click={() => {
-            editingEndpoint.wsEnabled = !editingEndpoint.wsEnabled
-            markDirty()
-          }}
-        >
-          <span class="toggle-track"><span class="toggle-thumb" /></span>
-        </button>
-      </div>
-
-      <!-- Proxy -->
-      {#if editingEndpoint.proxyUrl !== undefined}
-        <div class="flex min-w-[200px] flex-1 flex-col gap-1">
-          <span class="form-label">Proxy URL</span>
-          <input
-            class="w-full font-mono text-xs"
-            placeholder="https://api.example.com"
-            bind:value={editingEndpoint.proxyUrl}
-            on:input={markDirty}
-          />
-        </div>
-      {:else}
-        <button
-          class="btn btn-ghost self-end px-2.5 py-1 text-[11px]"
-          on:click={() => {
-            editingEndpoint.proxyUrl = ''
-            markDirty()
-          }}>+ Add Proxy</button
-        >
-      {/if}
-    </div>
   </div>
 
-  <!-- Response tabs bar -->
-  <div class="flex shrink-0 items-center gap-2 border-b border-wire bg-cave-deep px-3 py-2">
-    <span class="mr-1 shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted"
-      >Responses</span
-    >
-    <div class="flex flex-1 gap-1 overflow-x-auto pb-0.5">
+  <div class="flex shrink-0 items-center gap-1 border-b border-wire bg-cave-deep px-3 py-1.5">
+    <span class="mr-1 shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+      Responses
+    </span>
+    <div class="flex flex-1 gap-0.5 overflow-x-auto">
       {#each editingEndpoint.responses as resp, i}
         <div class="flex shrink-0 items-center">
           <button
-            class="flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-xs transition-all
+            class="flex items-center gap-1.5 rounded-sm border px-2 py-1 text-xs transition-all
               {activeResponseIdx === i
               ? 'border-wire-hi bg-cave-elevated text-ink'
-              : 'border-transparent bg-cave-raised text-ink-mid hover:border-wire hover:text-ink'}"
+              : 'border-transparent text-ink-mid hover:border-wire hover:text-ink'}"
             on:click={() => (activeResponseIdx = i)}
           >
-            <span
-              class="font-mono text-[11px] font-bold"
-              style="color:{resp.statusCode >= 500
-                ? '#f43f5e'
-                : resp.statusCode >= 400
-                ? '#f59e0b'
-                : resp.statusCode >= 300
-                ? '#3b82f6'
-                : '#22d3a0'}">{resp.statusCode}</span
+            <span class="font-mono font-bold" style="color:{statusColor(resp.statusCode)}"
+              >{resp.statusCode}</span
             >
-            <span class="max-w-[100px] overflow-hidden text-ellipsis whitespace-nowrap"
+            <span class="max-w-[80px] overflow-hidden text-ellipsis whitespace-nowrap"
               >{resp.name}</span
             >
             {#if editingEndpoint.strategy === 'fixed' && activeResponseIdx === i}
-              <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" title="Active response" />
+              <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
             {/if}
           </button>
           {#if editingEndpoint.responses.length > 1}
@@ -224,18 +190,136 @@
         </div>
       {/each}
     </div>
-    <button class="btn btn-ghost shrink-0 px-2.5 py-1 text-[11px]" on:click={addResponse}>
-      + Add
-    </button>
+    <button class="btn btn-ghost shrink-0 px-2 py-1 text-xs" on:click={addResponse}>+ Add</button>
   </div>
 
-  <!-- Response editor -->
+  <div class="tab-strip items-center">
+    <button
+      class="tab-btn {activeTab === 'body' ? 'active' : ''}"
+      on:click={() => (activeTab = 'body')}
+    >
+      Body{activeResponse && activeResponse.body.trim() ? ' ●' : ''}
+    </button>
+    <button
+      class="tab-btn {activeTab === 'headers' ? 'active' : ''}"
+      on:click={() => (activeTab = 'headers')}
+    >
+      Headers{activeResponse
+        ? activeResponse.headers.filter((h) => h.enabled && h.key).length > 0
+          ? ` (${activeResponse.headers.filter((h) => h.enabled && h.key).length})`
+          : ''
+        : ''}
+    </button>
+    <button
+      class="tab-btn {activeTab === 'cookies' ? 'active' : ''}"
+      on:click={() => (activeTab = 'cookies')}
+    >
+      Cookies{activeResponse && activeResponse.cookies.length > 0
+        ? ` (${activeResponse.cookies.length})`
+        : ''}
+    </button>
+    <button
+      class="tab-btn {activeTab === 'configure' ? 'active' : ''}"
+      on:click={() => (activeTab = 'configure')}
+    >
+      Configure
+    </button>
+    {#if activeTab === 'body' && activeResponse && ['json', 'xml', 'html'].includes(activeResponse.bodyType)}
+      <button
+        class="btn btn-ghost ml-auto px-2.5 py-0.5 text-xs"
+        on:click={() => {
+          if (!activeResponse) return
+          const formatted = prettifyBody(activeResponse.body, activeResponse.bodyType)
+          if (formatted === activeResponse.body) return
+          editingEndpoint.responses = editingEndpoint.responses.map((r, i) =>
+            i === activeResponseIdx ? { ...r, body: formatted } : r,
+          )
+          save()
+        }}>Prettify</button
+      >
+    {/if}
+  </div>
+
   <div class="flex flex-1 flex-col overflow-hidden">
-    {#if activeResponse}
-      <ResponseEditor
-        bind:response={editingEndpoint.responses[activeResponseIdx]}
-        on:change={onResponseChange}
-      />
+    {#if activeTab === 'configure'}
+      <div class="flex flex-col gap-5 overflow-y-auto p-5">
+        <div class="flex flex-wrap gap-6">
+          <div class="flex flex-col gap-1.5">
+            <span class="form-label">Delay (ms)</span>
+            <input
+              type="number"
+              min="0"
+              max="60000"
+              class="w-28"
+              bind:value={editingEndpoint.delayMs}
+              on:input={markDirty}
+            />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <span class="form-label">Strategy</span>
+            <select bind:value={editingEndpoint.strategy} on:change={markDirty}>
+              <option value="fixed">Fixed</option>
+              <option value="cycle">Cycle</option>
+              <option value="random">Random</option>
+            </select>
+          </div>
+
+          <div class="flex flex-col gap-3 self-end pb-1">
+            <label class="flex cursor-pointer items-center gap-3">
+              <span class="form-label">WebSocket</span>
+              <button
+                class="flex items-center bg-transparent {editingEndpoint.wsEnabled
+                  ? 'toggle-on'
+                  : ''}"
+                on:click={() => {
+                  editingEndpoint.wsEnabled = !editingEndpoint.wsEnabled
+                  markDirty()
+                }}
+              >
+                <span class="toggle-track"><span class="toggle-thumb" /></span>
+              </button>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <span class="form-label">Proxy URL</span>
+          {#if editingEndpoint.proxyUrl !== undefined}
+            <div class="flex items-center gap-2">
+              <input
+                class="flex-1 font-mono text-sm"
+                placeholder="https://api.example.com"
+                bind:value={editingEndpoint.proxyUrl}
+                on:input={markDirty}
+              />
+              <button
+                class="btn-icon hover:text-err"
+                on:click={() => {
+                  editingEndpoint.proxyUrl = undefined
+                  markDirty()
+                }}>✕</button
+              >
+            </div>
+          {:else}
+            <button
+              class="btn btn-ghost self-start"
+              on:click={() => {
+                editingEndpoint.proxyUrl = ''
+                markDirty()
+              }}>+ Add Proxy</button
+            >
+          {/if}
+        </div>
+      </div>
+    {:else if activeResponse}
+      {#key activeResponseIdx}
+        <ResponseEditor
+          response={activeResponse}
+          {activeTab}
+          on:update={handleResponseUpdate}
+        />
+      {/key}
     {/if}
   </div>
 </div>

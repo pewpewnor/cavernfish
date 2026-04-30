@@ -21,7 +21,7 @@ const maxLogEntries = 500
 
 type runningServer struct {
 	config       ServerConfig
-	httpServer   *http.Server
+	listeners    []*http.Server
 	status       string
 	errorMsg     string
 	requestCount int
@@ -39,7 +39,7 @@ type ServerManager struct {
 	appCtx        context.Context
 	eventEmitter  func(string, ...interface{})
 	cycleMu       sync.Mutex
-	cycleCounters map[string]int // endpointID → next index
+	cycleCounters map[string]int
 }
 
 func NewServerManager(store *CollectionStore, cfgStore *ServerConfigStore, bpManager *BreakpointManager, appCtx context.Context, emitter func(string, ...interface{})) *ServerManager {
@@ -52,7 +52,6 @@ func NewServerManager(store *CollectionStore, cfgStore *ServerConfigStore, bpMan
 		eventEmitter:  emitter,
 		cycleCounters: make(map[string]int),
 	}
-	// Load persisted server configs
 	for _, cfg := range cfgStore.GetAll() {
 		sm.servers[cfg.ID] = &runningServer{
 			config: cfg,
@@ -106,8 +105,7 @@ func (sm *ServerManager) Start(id string) error {
 		sm.handleRequest(w, r, id)
 	})
 
-	addr := fmt.Sprintf(":%d", rs.config.Port)
-	httpSrv := &http.Server{Addr: addr, Handler: mux}
+	_, cancel := context.WithCancel(sm.appCtx)
 
 	if rs.config.HTTPS {
 		cert, err := generateSelfSignedCert()
@@ -119,33 +117,61 @@ func (sm *ServerManager) Start(id string) error {
 			sm.eventEmitter("server:status", sm.GetAll())
 			return err
 		}
-		httpSrv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
+		tlsSrv := &http.Server{
+			Addr:      fmt.Sprintf(":%d", rs.config.Port),
+			Handler:   mux,
+			TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}},
+		}
+		httpSrv := &http.Server{
+			Addr:    fmt.Sprintf(":%d", rs.config.Port+1),
+			Handler: mux,
+		}
+
+		sm.mu.Lock()
+		rs.listeners = []*http.Server{tlsSrv, httpSrv}
+		rs.cancelFunc = cancel
+		rs.status = "running"
+		rs.errorMsg = ""
+		sm.mu.Unlock()
+
+		go func() {
+			if err := tlsSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				sm.mu.Lock()
+				rs.status = "error"
+				rs.errorMsg = err.Error()
+				sm.mu.Unlock()
+				sm.eventEmitter("server:status", sm.GetAll())
+			}
+		}()
+		go func() {
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				sm.mu.Lock()
+				if rs.status != "error" {
+					rs.errorMsg = fmt.Sprintf("HTTP companion: %v", err)
+				}
+				sm.mu.Unlock()
+			}
+		}()
+	} else {
+		httpSrv := &http.Server{Addr: fmt.Sprintf(":%d", rs.config.Port), Handler: mux}
+
+		sm.mu.Lock()
+		rs.listeners = []*http.Server{httpSrv}
+		rs.cancelFunc = cancel
+		rs.status = "running"
+		rs.errorMsg = ""
+		sm.mu.Unlock()
+
+		go func() {
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				sm.mu.Lock()
+				rs.status = "error"
+				rs.errorMsg = err.Error()
+				sm.mu.Unlock()
+				sm.eventEmitter("server:status", sm.GetAll())
+			}
+		}()
 	}
-
-	_, cancel := context.WithCancel(sm.appCtx)
-
-	sm.mu.Lock()
-	rs.httpServer = httpSrv
-	rs.cancelFunc = cancel
-	rs.status = "running"
-	rs.errorMsg = ""
-	sm.mu.Unlock()
-
-	go func() {
-		var err error
-		if rs.config.HTTPS {
-			err = httpSrv.ListenAndServeTLS("", "")
-		} else {
-			err = httpSrv.ListenAndServe()
-		}
-		if err != nil && err != http.ErrServerClosed {
-			sm.mu.Lock()
-			rs.status = "error"
-			rs.errorMsg = err.Error()
-			sm.mu.Unlock()
-			sm.eventEmitter("server:status", sm.GetAll())
-		}
-	}()
 
 	sm.eventEmitter("server:status", sm.GetAll())
 	return nil
@@ -159,10 +185,10 @@ func (sm *ServerManager) Stop(id string) error {
 		return fmt.Errorf("server %s not found", id)
 	}
 
-	if rs.httpServer != nil {
+	for _, srv := range rs.listeners {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = rs.httpServer.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
+		cancel()
 	}
 	if rs.cancelFunc != nil {
 		rs.cancelFunc()
@@ -170,7 +196,7 @@ func (sm *ServerManager) Stop(id string) error {
 
 	sm.mu.Lock()
 	rs.status = "stopped"
-	rs.httpServer = nil
+	rs.listeners = nil
 	sm.mu.Unlock()
 
 	sm.eventEmitter("server:status", sm.GetAll())
@@ -229,14 +255,15 @@ func (sm *ServerManager) toInfo(rs *runningServer) ServerInfo {
 	cnt := rs.requestCount
 	rs.logMu.Unlock()
 	return ServerInfo{
-		ID:           rs.config.ID,
-		Name:         rs.config.Name,
-		Port:         rs.config.Port,
-		CollectionID: rs.config.CollectionID,
-		HTTPS:        rs.config.HTTPS,
-		Status:       rs.status,
-		ErrorMsg:     rs.errorMsg,
-		RequestCount: cnt,
+		ID:                  rs.config.ID,
+		Name:                rs.config.Name,
+		Port:                rs.config.Port,
+		CollectionIDs:       rs.config.CollectionIDs,
+		HTTPS:               rs.config.HTTPS,
+		Status:              rs.status,
+		ErrorMsg:            rs.errorMsg,
+		RequestCount:        cnt,
+		DisabledEndpointIDs: rs.config.DisabledEndpointIDs,
 	}
 }
 
@@ -276,7 +303,7 @@ func (sm *ServerManager) handleRequest(w http.ResponseWriter, r *http.Request, s
 		ReqBody:    reqBody,
 	}
 
-	_, ep := sm.findEndpoint(rs.config.CollectionID, r.Method, r.URL.Path)
+	ep := sm.findEndpointInCollections(rs.config.CollectionIDs, rs.config.DisabledEndpointIDs, r.Method, r.URL.Path)
 	entry.Matched = ep != nil
 
 	if ep == nil {
@@ -449,22 +476,31 @@ func (sm *ServerManager) handleWebSocket(w http.ResponseWriter, r *http.Request,
 	sm.eventEmitter("request:logged", *entry)
 }
 
-func (sm *ServerManager) findEndpoint(collectionID, method, path string) (*Collection, *Endpoint) {
-	coll, ok := sm.store.Get(collectionID)
-	if !ok {
-		return nil, nil
+func (sm *ServerManager) findEndpointInCollections(collectionIDs, disabledEndpointIDs []string, method, path string) *Endpoint {
+	disabled := make(map[string]bool, len(disabledEndpointIDs))
+	for _, id := range disabledEndpointIDs {
+		disabled[id] = true
 	}
-	for i := range coll.Folders {
-		for j := range coll.Folders[i].Endpoints {
-			ep := &coll.Folders[i].Endpoints[j]
-			if strings.EqualFold(ep.Method, method) || ep.Method == "*" {
-				if matched, _ := matchPath(ep.Path, path); matched {
-					return coll, ep
+	for _, cid := range collectionIDs {
+		coll, ok := sm.store.Get(cid)
+		if !ok {
+			continue
+		}
+		for i := range coll.Folders {
+			for j := range coll.Folders[i].Endpoints {
+				ep := &coll.Folders[i].Endpoints[j]
+				if disabled[ep.ID] {
+					continue
+				}
+				if strings.EqualFold(ep.Method, method) || ep.Method == "*" {
+					if matched, _ := matchPath(ep.Path, path); matched {
+						return ep
+					}
 				}
 			}
 		}
 	}
-	return coll, nil
+	return nil
 }
 
 func (sm *ServerManager) selectResponse(ep *Endpoint) *MockResponse {
@@ -480,7 +516,7 @@ func (sm *ServerManager) selectResponse(ep *Endpoint) *MockResponse {
 		return &ep.Responses[idx]
 	case "random":
 		return &ep.Responses[rand.Intn(len(ep.Responses))]
-	default: // fixed
+	default:
 		idx := ep.ActiveIdx
 		if idx >= len(ep.Responses) {
 			idx = 0
@@ -506,7 +542,6 @@ func matchPath(pattern, path string) (bool, map[string]string) {
 	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
 	pathParts := strings.Split(strings.Trim(path, "/"), "/")
 
-	// Trailing wildcard
 	if len(patternParts) > 0 && patternParts[len(patternParts)-1] == "*" {
 		if len(pathParts) < len(patternParts)-1 {
 			return false, nil

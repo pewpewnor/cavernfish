@@ -1,47 +1,29 @@
 import { writable, derived } from 'svelte/store'
-import type {
-  Collection,
-  ServerInfo,
-  RequestLogEntry,
-  BreakpointHit,
-  Endpoint,
-  Folder,
-} from '../lib/types'
+import type { Collection, ServerInfo, RequestLogEntry, BreakpointHit, Endpoint } from '../lib/types'
 
 export const collections = writable<Collection[]>([])
 export const servers = writable<ServerInfo[]>([])
 export const requestLogs = writable<Record<string, RequestLogEntry[]>>({})
 export const pendingBreakpoints = writable<BreakpointHit[]>([])
 
-export type View = 'servers' | 'collections' | 'settings'
+export type View = 'servers' | 'collections' | 'breakpoints' | 'settings'
 export const activeView = writable<View>('servers')
-
-export const selectedCollectionId = writable<string | null>(null)
-export const selectedFolderId = writable<string | null>(null)
-export const selectedEndpointId = writable<string | null>(null)
 
 export const expandedCollections = writable<Set<string>>(new Set())
 export const expandedFolders = writable<Set<string>>(new Set())
 
-export const selectedEndpoint = derived(
-  [collections, selectedCollectionId, selectedFolderId, selectedEndpointId],
-  ([$cols, $cid, $fid, $eid]) => {
-    if (!$cid || !$fid || !$eid) return null
-    const col = $cols.find((c) => c.id === $cid)
-    if (!col) return null
-    const folder = col.folders.find((f) => f.id === $fid)
-    if (!folder) return null
-    const ep = folder.endpoints.find((e) => e.id === $eid)
-    return ep ? { collectionId: $cid, folderId: $fid, endpoint: ep } : null
-  },
-)
+export interface EndpointTab {
+  tabId: string
+  endpointId: string
+  collectionId: string
+  folderId: string
+}
 
-export const selectedCollection = derived(
-  [collections, selectedCollectionId],
-  ([$cols, $cid]) => $cols.find((c) => c.id === $cid) ?? null,
-)
+export const openTabs = writable<EndpointTab[]>([])
+export const activeTabId = writable<string | null>(null)
+export const dirtyTabs = writable<Set<string>>(new Set())
+export const tabEdits = writable<Record<string, Endpoint>>({})
 
-// Patch a collection in the store after any mutation
 export function patchCollection(updated: Collection) {
   collections.update((list) => {
     const idx = list.findIndex((c) => c.id === updated.id)

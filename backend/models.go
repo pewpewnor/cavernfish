@@ -66,22 +66,24 @@ type MockCookie struct {
 }
 
 type ServerConfig struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Port         int    `json:"port"`
-	CollectionID string `json:"collectionId"`
-	HTTPS        bool   `json:"https"`
+	ID                  string   `json:"id"`
+	Name                string   `json:"name"`
+	Port                int      `json:"port"`
+	CollectionIDs       []string `json:"collectionIds"`
+	HTTPS               bool     `json:"https"`
+	DisabledEndpointIDs []string `json:"disabledEndpointIds"`
 }
 
 type ServerInfo struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Port         int    `json:"port"`
-	CollectionID string `json:"collectionId"`
-	HTTPS        bool   `json:"https"`
-	Status       string `json:"status"` // running | stopped | error
-	ErrorMsg     string `json:"errorMsg,omitempty"`
-	RequestCount int    `json:"requestCount"`
+	ID                  string   `json:"id"`
+	Name                string   `json:"name"`
+	Port                int      `json:"port"`
+	CollectionIDs       []string `json:"collectionIds"`
+	HTTPS               bool     `json:"https"`
+	Status              string   `json:"status"`
+	ErrorMsg            string   `json:"errorMsg,omitempty"`
+	RequestCount        int      `json:"requestCount"`
+	DisabledEndpointIDs []string `json:"disabledEndpointIds"`
 }
 
 type RequestLogEntry struct {

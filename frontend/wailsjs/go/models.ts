@@ -345,8 +345,9 @@ export namespace backend {
 	    id: string;
 	    name: string;
 	    port: number;
-	    collectionId: string;
+	    collectionIds: string[];
 	    https: boolean;
+	    disabledEndpointIds: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ServerConfig(source);
@@ -357,19 +358,21 @@ export namespace backend {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.port = source["port"];
-	        this.collectionId = source["collectionId"];
+	        this.collectionIds = source["collectionIds"];
 	        this.https = source["https"];
+	        this.disabledEndpointIds = source["disabledEndpointIds"];
 	    }
 	}
 	export class ServerInfo {
 	    id: string;
 	    name: string;
 	    port: number;
-	    collectionId: string;
+	    collectionIds: string[];
 	    https: boolean;
 	    status: string;
 	    errorMsg?: string;
 	    requestCount: number;
+	    disabledEndpointIds: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ServerInfo(source);
@@ -380,11 +383,12 @@ export namespace backend {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.port = source["port"];
-	        this.collectionId = source["collectionId"];
+	        this.collectionIds = source["collectionIds"];
 	        this.https = source["https"];
 	        this.status = source["status"];
 	        this.errorMsg = source["errorMsg"];
 	        this.requestCount = source["requestCount"];
+	        this.disabledEndpointIds = source["disabledEndpointIds"];
 	    }
 	}
 

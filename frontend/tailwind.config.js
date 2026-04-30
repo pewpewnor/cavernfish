@@ -5,21 +5,20 @@ export default {
     extend: {
       colors: {
         cave: {
-          base: '#050508',
-          deep: '#0c0e16',
-          surface: '#141724',
-          raised: '#1c2035',
-          elevated: '#232840',
-          hover: '#2a3155',
+          base: '#0d0f17',
+          deep: '#111420',
+          surface: '#191c2a',
+          raised: '#1e2236',
+          elevated: '#252b40',
         },
         wire: {
-          DEFAULT: '#252a40',
-          hi: '#333c5a',
+          DEFAULT: '#2c3048',
+          hi: '#3d4462',
         },
         ink: {
-          DEFAULT: '#dde4f0',
-          mid: '#8892a8',
-          muted: '#4a5368',
+          DEFAULT: '#e2e8f5',
+          mid: '#9aa5be',
+          muted: '#636f8f',
           code: '#a5c8ff',
         },
         accent: {

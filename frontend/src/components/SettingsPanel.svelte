@@ -85,7 +85,7 @@
     <h2 class="text-lg font-semibold text-ink">Settings</h2>
   </div>
 
-  <div class="flex max-w-3xl flex-col gap-6">
+  <div class="mx-auto flex w-full max-w-3xl flex-col gap-6">
     <!-- Collections section -->
     <section class="overflow-hidden rounded-lg border border-wire bg-cave-surface">
       <div class="section-header">
