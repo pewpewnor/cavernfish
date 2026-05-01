@@ -1,6 +1,9 @@
 package backend
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type CollectionUpdate struct {
 	Name        string            `json:"name"`
@@ -25,25 +28,65 @@ type Folder struct {
 }
 
 type Endpoint struct {
-	ID         string         `json:"id"`
-	Name       string         `json:"name"`
-	Method     string         `json:"method"`   // GET POST PUT PATCH DELETE HEAD OPTIONS *
-	Path       string         `json:"path"`     // /api/users/:id or /api/*
-	Responses  []MockResponse `json:"responses"`
-	Strategy   string         `json:"strategy"` // fixed | cycle | random
-	ActiveIdx  int            `json:"activeIdx"`
-	DelayMs    int            `json:"delayMs"`
-	Breakpoint bool           `json:"breakpoint"`
-	ProxyURL   string         `json:"proxyUrl,omitempty"`
-	WSEnabled  bool           `json:"wsEnabled"`
+	ID         string       `json:"id"`
+	Name       string       `json:"name"`
+	Method     string       `json:"method"`
+	Path       string       `json:"path"`
+	StatusCode int          `json:"statusCode"`
+	Body       string       `json:"body"`
+	BodyType   string       `json:"bodyType"`
+	Headers    []KVPair     `json:"headers"`
+	Cookies    []MockCookie `json:"cookies"`
+	DelayMs    int          `json:"delayMs"`
+	Breakpoint bool         `json:"breakpoint"`
+	ProxyURL   string       `json:"proxyUrl,omitempty"`
+	WSEnabled  bool         `json:"wsEnabled"`
+}
+
+type endpointAlias Endpoint
+
+type endpointWire struct {
+	endpointAlias
+	Responses []MockResponse `json:"responses,omitempty"`
+	ActiveIdx int            `json:"activeIdx,omitempty"`
+	Strategy  string         `json:"strategy,omitempty"`
+}
+
+func (e *Endpoint) UnmarshalJSON(data []byte) error {
+	var w endpointWire
+	if err := json.Unmarshal(data, &w); err != nil {
+		return err
+	}
+	*e = Endpoint(w.endpointAlias)
+	if e.StatusCode == 0 && len(w.Responses) > 0 {
+		idx := w.ActiveIdx
+		if idx < 0 || idx >= len(w.Responses) {
+			idx = 0
+		}
+		r := w.Responses[idx]
+		e.StatusCode = r.StatusCode
+		e.Body = r.Body
+		e.BodyType = r.BodyType
+		e.Headers = r.Headers
+		e.Cookies = r.Cookies
+	}
+	return nil
+}
+
+func (e *Endpoint) ToResponse() MockResponse {
+	return MockResponse{
+		StatusCode: e.StatusCode,
+		Body:       e.Body,
+		BodyType:   e.BodyType,
+		Headers:    append([]KVPair(nil), e.Headers...),
+		Cookies:    append([]MockCookie(nil), e.Cookies...),
+	}
 }
 
 type MockResponse struct {
-	ID         string       `json:"id"`
-	Name       string       `json:"name"`
 	StatusCode int          `json:"statusCode"`
 	Body       string       `json:"body"`
-	BodyType   string       `json:"bodyType"` // json | text | html | xml | none
+	BodyType   string       `json:"bodyType"`
 	Headers    []KVPair     `json:"headers"`
 	Cookies    []MockCookie `json:"cookies"`
 }
@@ -62,7 +105,7 @@ type MockCookie struct {
 	MaxAge   int    `json:"maxAge"`
 	HttpOnly bool   `json:"httpOnly"`
 	Secure   bool   `json:"secure"`
-	SameSite string `json:"sameSite"` // Strict | Lax | None
+	SameSite string `json:"sameSite"`
 }
 
 type ServerConfig struct {

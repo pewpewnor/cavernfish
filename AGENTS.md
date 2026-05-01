@@ -10,18 +10,18 @@ Dark blue-black palette. Update `tailwind.config.js` when changing.
 
 | Token | Hex | Use |
 |---|---|---|
-| `cave-base` | `#0d0f17` | App background |
-| `cave-deep` | `#111420` | Sidebar, nav rail |
-| `cave-surface` | `#191c2a` | Panel surfaces, cards |
-| `cave-raised` | `#1e2236` | Inputs, raised elements |
-| `cave-elevated` | `#252b40` | Modals, dropdowns |
-| `wire` | `#2c3048` | Borders |
-| `wire-hi` | `#3d4462` | Highlighted borders, focuses |
-| `ink` | `#e2e8f5` | Primary text |
-| `ink-mid` | `#9aa5be` | Secondary / label text |
-| `ink-muted` | `#636f8f` | Placeholder, disabled text |
-| `accent` | `#3b6ef0` | Primary accent (blue) |
-| `accent-hi` | `#5080f8` | Accent hover state |
+| `cave-base` | `#1a1f30` | App background |
+| `cave-deep` | `#222740` | Sidebar, nav rail |
+| `cave-surface` | `#2c3250` | Panel surfaces, cards |
+| `cave-raised` | `#363d5f` | Inputs, raised elements |
+| `cave-elevated` | `#424a6e` | Modals, dropdowns |
+| `wire` | `#525a82` | Borders |
+| `wire-hi` | `#6671a0` | Highlighted borders, focuses |
+| `ink` | `#f3f6fc` | Primary text |
+| `ink-mid` | `#c9d2e8` | Secondary / label text |
+| `ink-muted` | `#969fbe` | Placeholder, disabled text |
+| `accent` | `#5483ff` | Primary accent (blue) |
+| `accent-hi` | `#729cff` | Accent hover state |
 | `ok` | `#22d3a0` | Success / GET method |
 | `warn` | `#f59e0b` | Warning / PUT method / unsaved |
 | `err` | `#f43f5e` | Error / DELETE method |

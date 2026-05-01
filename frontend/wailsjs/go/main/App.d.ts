@@ -36,9 +36,13 @@ export function ImportCollection(arg1:string):Promise<backend.Collection>;
 
 export function ImportFromOpenAPI(arg1:string):Promise<backend.Collection>;
 
+export function IsServerRunning(arg1:string):Promise<boolean>;
+
 export function ReleaseBreakpoint(arg1:string,arg2:backend.MockResponse):Promise<boolean>;
 
 export function RenameFolder(arg1:string,arg2:string,arg3:string):Promise<backend.Collection>;
+
+export function RestartServer(arg1:string):Promise<void>;
 
 export function StartServer(arg1:string):Promise<void>;
 

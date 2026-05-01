@@ -43,13 +43,11 @@ func (a *App) startup(ctx context.Context) {
 		wailsRuntime.LogError(ctx, fmt.Sprintf("server config store init failed: %v", err))
 	}
 
-	emitter := func(event string, data ...interface{}) {
+	emitter := func(event string, data ...any) {
 		wailsRuntime.EventsEmit(ctx, event, data...)
 	}
 	a.srvManager = backend.NewServerManager(store, cfgStore, a.bpManager, ctx, emitter)
 }
-
-// ──────────────────────────────── Collections ────────────────────────────────
 
 func (a *App) GetCollections() []backend.Collection {
 	return a.store.GetAll()
@@ -91,8 +89,6 @@ func (a *App) ImportCollection(data string) (*backend.Collection, error) {
 func (a *App) ImportFromOpenAPI(data string) (*backend.Collection, error) {
 	return backend.ImportFromOpenAPI(a.store, data)
 }
-
-// ──────────────────────────────── Folders ────────────────────────────────────
 
 func (a *App) CreateFolder(collectionID, name string) (*backend.Collection, error) {
 	c, ok := a.store.Update(collectionID, func(c *backend.Collection) {
@@ -141,8 +137,6 @@ func (a *App) DeleteFolder(collectionID, folderID string) (*backend.Collection, 
 	return c, nil
 }
 
-// ──────────────────────────────── Endpoints ──────────────────────────────────
-
 func (a *App) CreateEndpoint(collectionID, folderID string, ep backend.Endpoint) (*backend.Collection, error) {
 	if ep.ID == "" {
 		ep.ID = uuid.New().String()
@@ -150,19 +144,20 @@ func (a *App) CreateEndpoint(collectionID, folderID string, ep backend.Endpoint)
 	if ep.Method == "" {
 		ep.Method = "GET"
 	}
-	if ep.Strategy == "" {
-		ep.Strategy = "fixed"
+	if ep.StatusCode == 0 {
+		ep.StatusCode = 200
 	}
-	if len(ep.Responses) == 0 {
-		ep.Responses = []backend.MockResponse{{
-			ID:         uuid.New().String(),
-			Name:       "200 OK",
-			StatusCode: 200,
-			Body:       `{"message": "OK"}`,
-			BodyType:   "json",
-			Headers:    []backend.KVPair{},
-			Cookies:    []backend.MockCookie{},
-		}}
+	if ep.BodyType == "" {
+		ep.BodyType = "json"
+	}
+	if ep.Body == "" {
+		ep.Body = `{"message": "OK"}`
+	}
+	if ep.Headers == nil {
+		ep.Headers = []backend.KVPair{}
+	}
+	if ep.Cookies == nil {
+		ep.Cookies = []backend.MockCookie{}
 	}
 	c, ok := a.store.Update(collectionID, func(c *backend.Collection) {
 		for i := range c.Folders {
@@ -222,8 +217,6 @@ func (a *App) DeleteEndpoint(collectionID, folderID, endpointID string) (*backen
 	return c, nil
 }
 
-// ──────────────────────────────── Servers ────────────────────────────────────
-
 func (a *App) GetServers() []backend.ServerInfo {
 	return a.srvManager.GetAll()
 }
@@ -239,12 +232,23 @@ func (a *App) UpdateServer(cfg backend.ServerConfig) (backend.ServerInfo, error)
 	return a.srvManager.Update(cfg)
 }
 
+func (a *App) IsServerRunning(id string) bool {
+	return a.srvManager.IsRunning(id)
+}
+
 func (a *App) StartServer(id string) error {
 	return a.srvManager.Start(id)
 }
 
 func (a *App) StopServer(id string) error {
 	return a.srvManager.Stop(id)
+}
+
+func (a *App) RestartServer(id string) error {
+	if err := a.srvManager.Stop(id); err != nil {
+		return err
+	}
+	return a.srvManager.Start(id)
 }
 
 func (a *App) DeleteServer(id string) {
@@ -258,8 +262,6 @@ func (a *App) GetRequestLog(serverID string) []backend.RequestLogEntry {
 func (a *App) ClearRequestLog(serverID string) {
 	a.srvManager.ClearLog(serverID)
 }
-
-// ──────────────────────────────── Breakpoints ────────────────────────────────
 
 func (a *App) GetPendingBreakpoints() []backend.BreakpointHit {
 	return a.bpManager.GetPending()

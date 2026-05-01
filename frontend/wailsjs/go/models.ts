@@ -1,5 +1,43 @@
 export namespace backend {
 	
+	export class MockResponse {
+	    statusCode: number;
+	    body: string;
+	    bodyType: string;
+	    headers: KVPair[];
+	    cookies: MockCookie[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MockResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.statusCode = source["statusCode"];
+	        this.body = source["body"];
+	        this.bodyType = source["bodyType"];
+	        this.headers = this.convertValues(source["headers"], KVPair);
+	        this.cookies = this.convertValues(source["cookies"], MockCookie);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class MockCookie {
 	    name: string;
 	    value: string;
@@ -42,56 +80,16 @@ export namespace backend {
 	        this.enabled = source["enabled"];
 	    }
 	}
-	export class MockResponse {
-	    id: string;
-	    name: string;
-	    statusCode: number;
-	    body: string;
-	    bodyType: string;
-	    headers: KVPair[];
-	    cookies: MockCookie[];
-	
-	    static createFrom(source: any = {}) {
-	        return new MockResponse(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.statusCode = source["statusCode"];
-	        this.body = source["body"];
-	        this.bodyType = source["bodyType"];
-	        this.headers = this.convertValues(source["headers"], KVPair);
-	        this.cookies = this.convertValues(source["cookies"], MockCookie);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class Endpoint {
 	    id: string;
 	    name: string;
 	    method: string;
 	    path: string;
-	    responses: MockResponse[];
-	    strategy: string;
-	    activeIdx: number;
+	    statusCode: number;
+	    body: string;
+	    bodyType: string;
+	    headers: KVPair[];
+	    cookies: MockCookie[];
 	    delayMs: number;
 	    breakpoint: boolean;
 	    proxyUrl?: string;
@@ -107,9 +105,11 @@ export namespace backend {
 	        this.name = source["name"];
 	        this.method = source["method"];
 	        this.path = source["path"];
-	        this.responses = this.convertValues(source["responses"], MockResponse);
-	        this.strategy = source["strategy"];
-	        this.activeIdx = source["activeIdx"];
+	        this.statusCode = source["statusCode"];
+	        this.body = source["body"];
+	        this.bodyType = source["bodyType"];
+	        this.headers = this.convertValues(source["headers"], KVPair);
+	        this.cookies = this.convertValues(source["cookies"], MockCookie);
 	        this.delayMs = source["delayMs"];
 	        this.breakpoint = source["breakpoint"];
 	        this.proxyUrl = source["proxyUrl"];

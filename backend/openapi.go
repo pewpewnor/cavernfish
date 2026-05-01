@@ -3,21 +3,21 @@ package backend
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
 )
 
-// ImportFromOpenAPI parses an OpenAPI 3.x JSON spec and creates a collection.
 func ImportFromOpenAPI(store *CollectionStore, data string) (*Collection, error) {
-	var spec map[string]interface{}
+	var spec map[string]any
 	if err := json.Unmarshal([]byte(data), &spec); err != nil {
 		return nil, fmt.Errorf("invalid JSON: %v", err)
 	}
 
 	title := "Imported Collection"
 	description := ""
-	if info, ok := spec["info"].(map[string]interface{}); ok {
+	if info, ok := spec["info"].(map[string]any); ok {
 		if t, ok := info["title"].(string); ok {
 			title = t
 		}
@@ -28,15 +28,15 @@ func ImportFromOpenAPI(store *CollectionStore, data string) (*Collection, error)
 
 	c := store.Create(title, description)
 
-	paths, ok := spec["paths"].(map[string]interface{})
+	paths, ok := spec["paths"].(map[string]any)
 	if !ok {
 		return &c, nil
 	}
 
-	folderMap := make(map[string]string) // tag → folderID
+	folderMap := make(map[string]string)
 
 	for path, pathItem := range paths {
-		pathItemMap, ok := pathItem.(map[string]interface{})
+		pathItemMap, ok := pathItem.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -45,13 +45,13 @@ func ImportFromOpenAPI(store *CollectionStore, data string) (*Collection, error)
 			if method == "PARAMETERS" || method == "SERVERS" || method == "SUMMARY" || method == "DESCRIPTION" {
 				continue
 			}
-			opMap, ok := operation.(map[string]interface{})
+			opMap, ok := operation.(map[string]any)
 			if !ok {
 				continue
 			}
 
 			tag := "Default"
-			if tags, ok := opMap["tags"].([]interface{}); ok && len(tags) > 0 {
+			if tags, ok := opMap["tags"].([]any); ok && len(tags) > 0 {
 				if t, ok := tags[0].(string); ok {
 					tag = t
 				}
@@ -72,11 +72,14 @@ func ImportFromOpenAPI(store *CollectionStore, data string) (*Collection, error)
 			folderID := folderMap[tag]
 
 			ep := Endpoint{
-				ID:        uuid.New().String(),
-				Method:    method,
-				Path:      path,
-				Strategy:  "fixed",
-				Responses: []MockResponse{},
+				ID:         uuid.New().String(),
+				Method:     method,
+				Path:       path,
+				StatusCode: 200,
+				BodyType:   "json",
+				Body:       "{}",
+				Headers:    []KVPair{},
+				Cookies:    []MockCookie{},
 			}
 
 			if opID, ok := opMap["operationId"].(string); ok {
@@ -87,49 +90,12 @@ func ImportFromOpenAPI(store *CollectionStore, data string) (*Collection, error)
 				ep.Name = method + " " + path
 			}
 
-			if responses, ok := opMap["responses"].(map[string]interface{}); ok {
-				for statusStr, respObj := range responses {
-					statusCode := 200
-					fmt.Sscanf(statusStr, "%d", &statusCode)
-
-					mockResp := MockResponse{
-						ID:         uuid.New().String(),
-						Name:       statusStr,
-						StatusCode: statusCode,
-						BodyType:   "json",
-						Body:       "{}",
-						Headers:    []KVPair{},
-						Cookies:    []MockCookie{},
-					}
-
-					if respMap, ok := respObj.(map[string]interface{}); ok {
-						if content, ok := respMap["content"].(map[string]interface{}); ok {
-							for _, mediaType := range content {
-								if mt, ok := mediaType.(map[string]interface{}); ok {
-									if example, ok := mt["example"]; ok {
-										if b, err := json.MarshalIndent(example, "", "  "); err == nil {
-											mockResp.Body = string(b)
-										}
-									}
-								}
-								break
-							}
-						}
-					}
-					ep.Responses = append(ep.Responses, mockResp)
+			if responses, ok := opMap["responses"].(map[string]any); ok {
+				bestStatus, bestBody := pickResponse(responses)
+				ep.StatusCode = bestStatus
+				if bestBody != "" {
+					ep.Body = bestBody
 				}
-			}
-
-			if len(ep.Responses) == 0 {
-				ep.Responses = []MockResponse{{
-					ID:         uuid.New().String(),
-					Name:       "200 OK",
-					StatusCode: 200,
-					Body:       "{}",
-					BodyType:   "json",
-					Headers:    []KVPair{},
-					Cookies:    []MockCookie{},
-				}}
 			}
 
 			updated, err := addEndpointToFolder(store, c.ID, folderID, ep)
@@ -140,6 +106,55 @@ func ImportFromOpenAPI(store *CollectionStore, data string) (*Collection, error)
 	}
 
 	return &c, nil
+}
+
+func pickResponse(responses map[string]any) (int, string) {
+	preferred := []string{"200", "201", "204"}
+	for _, p := range preferred {
+		if r, ok := responses[p]; ok {
+			return parseStatus(p), extractExample(r)
+		}
+	}
+	for k, r := range responses {
+		if strings.HasPrefix(k, "2") {
+			return parseStatus(k), extractExample(r)
+		}
+	}
+	for k, r := range responses {
+		return parseStatus(k), extractExample(r)
+	}
+	return 200, ""
+}
+
+func parseStatus(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 200
+	}
+	return n
+}
+
+func extractExample(respObj any) string {
+	respMap, ok := respObj.(map[string]any)
+	if !ok {
+		return ""
+	}
+	content, ok := respMap["content"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	for _, mediaType := range content {
+		mt, ok := mediaType.(map[string]any)
+		if !ok {
+			continue
+		}
+		if example, ok := mt["example"]; ok {
+			if b, err := json.MarshalIndent(example, "", "  "); err == nil {
+				return string(b)
+			}
+		}
+	}
+	return ""
 }
 
 func createFolderInCollection(store *CollectionStore, collectionID, name string) (*Collection, error) {

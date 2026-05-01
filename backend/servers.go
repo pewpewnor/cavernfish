@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -31,26 +30,23 @@ type runningServer struct {
 }
 
 type ServerManager struct {
-	mu            sync.RWMutex
-	servers       map[string]*runningServer
-	store         *CollectionStore
-	cfgStore      *ServerConfigStore
-	bpManager     *BreakpointManager
-	appCtx        context.Context
-	eventEmitter  func(string, ...interface{})
-	cycleMu       sync.Mutex
-	cycleCounters map[string]int
+	mu           sync.RWMutex
+	servers      map[string]*runningServer
+	store        *CollectionStore
+	cfgStore     *ServerConfigStore
+	bpManager    *BreakpointManager
+	appCtx       context.Context
+	eventEmitter func(string, ...any)
 }
 
-func NewServerManager(store *CollectionStore, cfgStore *ServerConfigStore, bpManager *BreakpointManager, appCtx context.Context, emitter func(string, ...interface{})) *ServerManager {
+func NewServerManager(store *CollectionStore, cfgStore *ServerConfigStore, bpManager *BreakpointManager, appCtx context.Context, emitter func(string, ...any)) *ServerManager {
 	sm := &ServerManager{
-		servers:       make(map[string]*runningServer),
-		store:         store,
-		cfgStore:      cfgStore,
-		bpManager:     bpManager,
-		appCtx:        appCtx,
-		eventEmitter:  emitter,
-		cycleCounters: make(map[string]int),
+		servers:      make(map[string]*runningServer),
+		store:        store,
+		cfgStore:     cfgStore,
+		bpManager:    bpManager,
+		appCtx:       appCtx,
+		eventEmitter: emitter,
 	}
 	for _, cfg := range cfgStore.GetAll() {
 		sm.servers[cfg.ID] = &runningServer{
@@ -81,12 +77,19 @@ func (sm *ServerManager) Update(cfg ServerConfig) (ServerInfo, error) {
 	if !ok {
 		return ServerInfo{}, fmt.Errorf("server not found")
 	}
-	if rs.status == "running" {
-		return ServerInfo{}, fmt.Errorf("stop the server before editing")
-	}
 	rs.config = cfg
 	sm.cfgStore.Set(cfg)
 	return sm.toInfo(rs), nil
+}
+
+func (sm *ServerManager) IsRunning(id string) bool {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	rs, ok := sm.servers[id]
+	if !ok {
+		return false
+	}
+	return rs.status == "running"
 }
 
 func (sm *ServerManager) Start(id string) error {
@@ -104,8 +107,6 @@ func (sm *ServerManager) Start(id string) error {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		sm.handleRequest(w, r, id)
 	})
-
-	_, cancel := context.WithCancel(sm.appCtx)
 
 	if rs.config.HTTPS {
 		cert, err := generateSelfSignedCert()
@@ -127,6 +128,7 @@ func (sm *ServerManager) Start(id string) error {
 			Handler: mux,
 		}
 
+		_, cancel := context.WithCancel(sm.appCtx)
 		sm.mu.Lock()
 		rs.listeners = []*http.Server{tlsSrv, httpSrv}
 		rs.cancelFunc = cancel
@@ -155,6 +157,7 @@ func (sm *ServerManager) Start(id string) error {
 	} else {
 		httpSrv := &http.Server{Addr: fmt.Sprintf(":%d", rs.config.Port), Handler: mux}
 
+		_, cancel := context.WithCancel(sm.appCtx)
 		sm.mu.Lock()
 		rs.listeners = []*http.Server{httpSrv}
 		rs.cancelFunc = cancel
@@ -309,7 +312,7 @@ func (sm *ServerManager) handleRequest(w http.ResponseWriter, r *http.Request, s
 	if ep == nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(404)
-		fmt.Fprint(w, `{"error":"no matching endpoint","path":"`+r.URL.Path+`"}`)
+		_, _ = fmt.Fprint(w, `{"error":"no matching endpoint","path":"`+r.URL.Path+`"}`)
 		entry.StatusCode = 404
 		entry.LatencyMs = time.Since(start).Milliseconds()
 		sm.appendLog(rs, entry)
@@ -331,15 +334,7 @@ func (sm *ServerManager) handleRequest(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	resp := sm.selectResponse(ep)
-	if resp == nil {
-		w.WriteHeader(200)
-		entry.StatusCode = 200
-		entry.LatencyMs = time.Since(start).Milliseconds()
-		sm.appendLog(rs, entry)
-		sm.eventEmitter("request:logged", entry)
-		return
-	}
+	resp := ep.ToResponse()
 
 	if ep.Breakpoint {
 		hit := BreakpointHit{
@@ -352,7 +347,7 @@ func (sm *ServerManager) handleRequest(w http.ResponseWriter, r *http.Request, s
 			ReqHeaders: reqHeaders,
 			ReqBody:    reqBody,
 			Endpoint:   *ep,
-			Response:   *resp,
+			Response:   resp,
 		}
 		entry.Breakpointed = true
 		entry.BreakpointID = hit.ID
@@ -369,10 +364,10 @@ func (sm *ServerManager) handleRequest(w http.ResponseWriter, r *http.Request, s
 			sm.eventEmitter("request:logged", entry)
 			return
 		}
-		resp = modifiedResp
+		resp = *modifiedResp
 	}
 
-	sm.writeResponse(w, resp)
+	sm.writeResponse(w, &resp)
 	entry.StatusCode = resp.StatusCode
 	entry.LatencyMs = time.Since(start).Milliseconds()
 	sm.appendLog(rs, entry)
@@ -408,8 +403,12 @@ func (sm *ServerManager) writeResponse(w http.ResponseWriter, resp *MockResponse
 			w.Header().Set("Content-Type", "text/plain")
 		}
 	}
-	w.WriteHeader(resp.StatusCode)
-	fmt.Fprint(w, resp.Body)
+	status := resp.StatusCode
+	if status == 0 {
+		status = 200
+	}
+	w.WriteHeader(status)
+	_, _ = fmt.Fprint(w, resp.Body)
 }
 
 func (sm *ServerManager) handleProxy(w http.ResponseWriter, r *http.Request, proxyURL string, rs *runningServer, entry *RequestLogEntry, start time.Time) {
@@ -456,11 +455,10 @@ func (sm *ServerManager) handleWebSocket(w http.ResponseWriter, r *http.Request,
 		sm.eventEmitter("request:logged", *entry)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
-	resp := sm.selectResponse(ep)
-	if resp != nil && resp.Body != "" {
-		_ = conn.WriteMessage(websocket.TextMessage, []byte(resp.Body))
+	if ep.Body != "" {
+		_ = conn.WriteMessage(websocket.TextMessage, []byte(ep.Body))
 	}
 
 	for {
@@ -501,28 +499,6 @@ func (sm *ServerManager) findEndpointInCollections(collectionIDs, disabledEndpoi
 		}
 	}
 	return nil
-}
-
-func (sm *ServerManager) selectResponse(ep *Endpoint) *MockResponse {
-	if len(ep.Responses) == 0 {
-		return nil
-	}
-	switch ep.Strategy {
-	case "cycle":
-		sm.cycleMu.Lock()
-		idx := sm.cycleCounters[ep.ID]
-		sm.cycleCounters[ep.ID] = (idx + 1) % len(ep.Responses)
-		sm.cycleMu.Unlock()
-		return &ep.Responses[idx]
-	case "random":
-		return &ep.Responses[rand.Intn(len(ep.Responses))]
-	default:
-		idx := ep.ActiveIdx
-		if idx >= len(ep.Responses) {
-			idx = 0
-		}
-		return &ep.Responses[idx]
-	}
 }
 
 func (sm *ServerManager) appendLog(rs *runningServer, entry RequestLogEntry) {

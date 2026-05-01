@@ -70,12 +70,20 @@ export function ImportFromOpenAPI(arg1) {
   return window['go']['main']['App']['ImportFromOpenAPI'](arg1);
 }
 
+export function IsServerRunning(arg1) {
+  return window['go']['main']['App']['IsServerRunning'](arg1);
+}
+
 export function ReleaseBreakpoint(arg1, arg2) {
   return window['go']['main']['App']['ReleaseBreakpoint'](arg1, arg2);
 }
 
 export function RenameFolder(arg1, arg2, arg3) {
   return window['go']['main']['App']['RenameFolder'](arg1, arg2, arg3);
+}
+
+export function RestartServer(arg1) {
+  return window['go']['main']['App']['RestartServer'](arg1);
 }
 
 export function StartServer(arg1) {
